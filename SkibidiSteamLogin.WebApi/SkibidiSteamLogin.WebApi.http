@@ -1,0 +1,6 @@
+@SkibidiSteamLogin.WebApi_HostAddress = http://localhost:5102
+
+GET {{SkibidiSteamLogin.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
