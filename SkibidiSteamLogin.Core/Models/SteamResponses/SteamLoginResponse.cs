@@ -16,7 +16,7 @@ namespace SkibidiSteamLogin.Core.Models.SteamResponses
 
         [JsonProperty("interval")]
         [JsonPropertyName("interval")]
-        internal int Interval { get; set; }
+        internal float Interval { get; set; }
 
         [JsonProperty("allowed_confirmations")]
         [JsonPropertyName("allowed_confirmations")]

@@ -5,12 +5,23 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>SkibidiSteamLogin</Title>
-    <Description></Description>
-    <PackageIcon>881163_bathroom_512x512.png</PackageIcon>
+    <Description>Package for logging into steam</Description>
+    <PackageIcon>image.png</PackageIcon>
+    <RepositoryUrl>https://github.com/vQass/SkibidiSteamLogin</RepositoryUrl>
+    <PackageLicenseFile>License.txt</PackageLicenseFile>
+    <PackageTags>Steam;SteamLogin</PackageTags>
+    <Company></Company>
+    <Product>SkibidiSteamLogin</Product>
+    <Authors>Qas</Authors>
+    <Version>1.0.2</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\..\..\Desktop\881163_bathroom_512x512.png">
+    <None Include="..\..\..\..\Desktop\image.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\..\..\..\Desktop\License.txt">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
