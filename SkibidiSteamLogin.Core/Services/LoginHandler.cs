@@ -60,7 +60,10 @@ namespace SkibidiSteamLogin.Core.Services
                 CodeType = guardTypeEnum
             };
 
-            var result = await _httpClientWrapper.EnterSteamGuardCodeAsync(steamGuardRequest);
+            if (guardTypeEnum != AuthGuardTypeEnum.None)
+            {
+                var result = await _httpClientWrapper.EnterSteamGuardCodeAsync(steamGuardRequest);
+            }
 
             await Task.Delay(500);
 
