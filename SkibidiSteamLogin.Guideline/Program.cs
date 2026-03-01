@@ -1,4 +1,5 @@
 using SkibidiSteamLogin.Core;
+using SkibidiSteamLogin.Core.Models.Consts;
 
 namespace SkibidiSteamLogin.Guideline
 {
@@ -11,7 +12,7 @@ namespace SkibidiSteamLogin.Guideline
 
             builder.Services.AddSteamLoginCoreModule(options => 
             {
-                options.SetTokenDomains = [Core.Models.Consts.SetTokenDomains.SteamCommunityDomain]; // choose domains for token setting
+                options.SetTokenDomains = [SteamDomains.Community]; // choose domains for token setting
             });
 
             var host = builder.Build();

@@ -151,7 +151,7 @@ namespace SkibidiSteamLogin.Core.Tests.Services
             var result = await _sut.EnterSteamGuardCodeAsync(session, "code", AuthGuardType.EmailCode);
 
             Assert.False(result.IsSuccess);
-            Assert.Contains("Steam Guard", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("steam guard", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

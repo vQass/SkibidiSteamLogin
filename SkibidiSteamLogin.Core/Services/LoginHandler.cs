@@ -96,9 +96,14 @@ namespace SkibidiSteamLogin.Core.Services
                 CodeType = guardType
             };
 
-            if (guardTypeEnum != AuthGuardTypeEnum.None)
+            if (guardType != AuthGuardType.None)
             {
-                var result = await _httpClientWrapper.EnterSteamGuardCodeAsync(steamGuardRequest);
+                var result = await _httpClientWrapper.EnterSteamGuardCodeAsync(request);
+                if (!result.IsSuccess)
+                {
+                    _logger.LogWarning("Failed to submit Steam Guard code. Status: {StatusCode}", result.StatusCode);
+                    return OperationResult<LoginResult>.Failure("Failed to submit Steam Guard code.");
+                }
             }
 
             await Task.Delay(500);
