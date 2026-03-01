@@ -6,12 +6,10 @@ namespace SkibidiSteamLogin.Core.Interfaces
 {
     public interface ILoginHandler
     {
-        Task<LoginResult> LoginAsync(string username, string password);
-        Task<LoginResult> EnterSteamGuardCodeAsync(string authcode, AuthGuardTypeEnum guardTypeEnum);
+        Task<OperationResult<LoginResult>> LoginAsync(string username, string password);
+        Task<OperationResult<LoginResult>> EnterSteamGuardCodeAsync(LoginResult loginSession, string authCode, AuthGuardType guardType);
 
         CookieCollection GetCookies();
-
-        void SaveCookies();
-        void LoadCookies();
+        void SetCookies(CookieCollection cookies);
     }
 }

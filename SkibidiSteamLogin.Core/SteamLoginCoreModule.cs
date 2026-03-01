@@ -12,12 +12,13 @@ namespace SkibidiSteamLogin.Core
     {
         public static IServiceCollection AddSteamLoginCoreModule(this IServiceCollection services, Action<SkibidiLoginConfiguration> options = null)
         {
-            services.TryAddSingleton<ILoginHandler, LoginHandler>();
-            services.TryAddSingleton<IHttpClientWrapper, HttpClientWrapper>();
+            services.TryAddScoped<ILoginHandler, LoginHandler>();
+            services.TryAddScoped<IHttpClientWrapper, HttpClientWrapper>();
+            services.TryAddScoped<ICookiePersistenceService, CookiePersistenceService>();
 
             if (options is null)
             {
-                options = (opt) => { opt.SetTokenDomains = SetTokenDomains.AllDomains; };
+                options = (opt) => { opt.SetTokenDomains = SteamDomains.All; };
             }
 
             services.Configure(options);

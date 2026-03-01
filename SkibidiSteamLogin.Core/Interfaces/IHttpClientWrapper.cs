@@ -13,7 +13,7 @@ namespace SkibidiSteamLogin.Core.Interfaces
         Task<HttpResult> EnterSteamGuardCodeAsync(SteamGuardRequest steamGuardRequest);
         Task<HttpDataResult<string>> PollAuthSessionStatusAsync(string clientId, string requestId);
         Task<HttpDataResult<FinalizeLoginResult>> FinalizeLoginAsync(string token);
-        Task<HttpResult> SetToken(string steamId, string auth, string nonce, string url);
+        Task<HttpResult> SetTokenAsync(string steamId, string auth, string nonce, string url);
         CookieCollection GetCookies();
         void SetCookies(CookieCollection cookieCollection);
     }

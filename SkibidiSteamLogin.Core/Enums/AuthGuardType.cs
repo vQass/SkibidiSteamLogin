@@ -1,6 +1,6 @@
 ﻿namespace SkibidiSteamLogin.Core.Enums
 {
-    public enum AuthGuardTypeEnum
+    public enum AuthGuardType
     {
         Unknown = 0,
         None = 1,

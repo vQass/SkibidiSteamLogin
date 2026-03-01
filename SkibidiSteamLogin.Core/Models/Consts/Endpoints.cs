@@ -1,6 +1,6 @@
 ﻿namespace SkibidiSteamLogin.Core.Models.Consts
 {
-    internal class Endpoints
+    internal static class Endpoints
     {
         internal const string SteamCommunityUrlBase = "https://steamcommunity.com/";
         internal const string SteamPoweredUrlBase = "https://api.steampowered.com/";

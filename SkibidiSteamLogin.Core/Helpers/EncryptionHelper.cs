@@ -4,6 +4,7 @@ using System.Text;
 using SkibidiSteamLogin.Core.Models.SteamResponses;
 
 [assembly: InternalsVisibleTo("SkibidiSteamLogin.Core.Tests")]
+[assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
 namespace SkibidiSteamLogin.Core.Helpers
 {
     internal static class EncryptionHelper
@@ -16,12 +17,12 @@ namespace SkibidiSteamLogin.Core.Helpers
             if (string.IsNullOrWhiteSpace(password))
                 throw new ArgumentNullException("Password cannot be null or empty.");
 
-            using var rsa = new RSACryptoServiceProvider();
+            using var rsa = RSA.Create();
 
             var rsaParams = new RSAParameters()
             {
                 Modulus = HexDecoder.Decode(rsaData.Modulus),
-                Exponent = HexDecoder.Decode(rsaData.Exponent ),
+                Exponent = HexDecoder.Decode(rsaData.Exponent),
             };
 
             rsa.ImportParameters(rsaParams);
@@ -31,6 +32,5 @@ namespace SkibidiSteamLogin.Core.Helpers
 
             return Convert.ToBase64String(encryptedBytes);
         }
-
     }
 }

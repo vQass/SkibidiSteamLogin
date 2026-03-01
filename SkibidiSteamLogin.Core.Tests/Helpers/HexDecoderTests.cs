@@ -104,5 +104,42 @@ namespace SkibidiSteamLogin.Core.Tests.Helpers
             // Assert
             Assert.Equal(expected, result);
         }
+
+        [Fact]
+        public void Decode_WhitespaceOnlyString_ThrowsArgumentException()
+        {
+            // Arrange
+            string hex = "   ";
+
+            // Act & Assert
+            var ex = Assert.Throws<ArgumentException>(() => HexDecoder.Decode(hex));
+            Assert.Equal("Input cannot be null or empty. (Parameter 'hex')", ex.Message);
+        }
+
+        [Fact]
+        public void Decode_HexWithPrefix0x_ThrowsFormatException()
+        {
+            // Arrange
+            string hex = "0x4A6F";
+
+            // Act & Assert
+            var ex = Assert.Throws<FormatException>(() => HexDecoder.Decode(hex));
+            Assert.Equal("Invalid hexadecimal character: x", ex.Message);
+        }
+
+        [Fact]
+        public void Decode_LargeHexString_ReturnsCorrectByteArray()
+        {
+            // Arrange — 1000 random bytes
+            var bytes = new byte[1000];
+            new Random(42).NextBytes(bytes);
+            string hex = BitConverter.ToString(bytes).Replace("-", "");
+
+            // Act
+            var result = HexDecoder.Decode(hex);
+
+            // Assert
+            Assert.Equal(bytes, result);
+        }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using SkibidiSteamLogin.Core.Interfaces;
 using SkibidiSteamLogin.Core.Mapping;
@@ -9,112 +10,122 @@ using SkibidiSteamLogin.Core.Models.Externals;
 
 namespace SkibidiSteamLogin.Core.Wrappers
 {
-    internal class HttpClientWrapper : IHttpClientWrapper
+    internal class HttpClientWrapper : IHttpClientWrapper, IDisposable
     {
         private readonly HttpClient _httpClient;
+        private readonly HttpClientHandler _httpClientHandler;
         private readonly CookieContainer _cookieContainer;
+        private readonly ILogger<HttpClientWrapper> _logger;
+        private bool _disposed;
 
-        public HttpClientWrapper()
+        public HttpClientWrapper(ILogger<HttpClientWrapper> logger)
         {
+            _logger = logger;
             _cookieContainer = new CookieContainer();
-
-            var httpHandler = new HttpClientHandler()
-            { 
+            _httpClientHandler = new HttpClientHandler
+            {
                 CookieContainer = _cookieContainer
             };
-            httpHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
-            _httpClient = new HttpClient(httpHandler);
+            _httpClient = new HttpClient(_httpClientHandler);
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", HttpHeaderConstants.UserAgent);
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", HttpHeaderConstants.AcceptLanguage);
         }
 
         public async Task<HttpResult> StartSessionAsync()
         {
+            _logger.LogDebug("Starting Steam session.");
             var result = await _httpClient.GetAsync(Endpoints.SteamCommunityUrlBase);
-
             return result.ToHttpResult();
         }
 
         public async Task<HttpDataResult<RsaData>> GetRsaDataAsync(string username)
         {
-            var result = await _httpClient.GetAsync(Endpoints.SteamPoweredUrlBase + Endpoints.GetRsa + "?account_name=" + username);
+            _logger.LogDebug("Fetching RSA data for user {Username}.", username);
 
-            RsaData data = null;
+            var response = await _httpClient.GetAsync(
+                Endpoints.SteamPoweredUrlBase + Endpoints.GetRsa + "?account_name=" + username);
 
-            if (result.IsSuccessStatusCode)
-            {
-                var str = await result.Content.ReadAsStringAsync();
-                var response = JsonConvert.DeserializeObject<SteamResponseWrapper<RsaData>>(str);
-
-                data = response.Data;
-            }
-
-            return result.ToHttpDataResult(data);
+            return await SendAndDeserializeAsync<SteamResponseWrapper<RsaData>, RsaData>(
+                response, wrapper => wrapper.Data, "Fetch RSA data");
         }
 
         public async Task<HttpDataResult<SteamLoginResponse>> LoginAsync(string username, string encryptedPassword, long timestamp)
         {
-            var uri = new Uri(Endpoints.SteamPoweredUrlBase + Endpoints.CredentialsSessionStart + $"?account_name={username}&encrypted_password={Uri.EscapeDataString(encryptedPassword)}&encryption_timestamp={timestamp}");
+            _logger.LogDebug("Sending login request for user {Username}.", username);
+            var uri = new Uri(Endpoints.SteamPoweredUrlBase + Endpoints.CredentialsSessionStart);
 
-            var msg  = new HttpRequestMessage(HttpMethod.Post, uri);
+            var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["account_name"] = username,
+                ["encrypted_password"] = encryptedPassword,
+                ["encryption_timestamp"] = timestamp.ToString()
+            });
 
+            var msg = new HttpRequestMessage(HttpMethod.Post, uri) { Content = content };
             ApplyHeaders(msg);
 
-            var result = await _httpClient.SendAsync(msg);
+            var response = await _httpClient.SendAsync(msg);
 
-            var resonseString = await result.Content.ReadAsStringAsync();
-
-            var responseData = JsonConvert.DeserializeObject<SteamResponseWrapper<SteamLoginResponse>>(resonseString);
-
-            return result.ToHttpDataResult(responseData.Data);
+            return await SendAndDeserializeAsync<SteamResponseWrapper<SteamLoginResponse>, SteamLoginResponse>(
+                response, wrapper => wrapper.Data, "Login request");
         }
 
         public async Task<HttpResult> EnterSteamGuardCodeAsync(SteamGuardRequest steamGuardRequest)
         {
-            var queryParams = $"?client_id={steamGuardRequest.ClientId}&steamid={steamGuardRequest.SteamId}&code={steamGuardRequest.Code}&code_type={(byte)steamGuardRequest.CodeType}";
-            
-            var uri = new Uri(Endpoints.SteamPoweredUrlBase + Endpoints.CredentialsSessionUpdateWithGuardCode + queryParams);
+            _logger.LogDebug("Submitting Steam Guard code.");
+            var uri = new Uri(Endpoints.SteamPoweredUrlBase + Endpoints.CredentialsSessionUpdateWithGuardCode);
 
-            var msg = new HttpRequestMessage(HttpMethod.Post, uri);
+            var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = steamGuardRequest.ClientId,
+                ["steamid"] = steamGuardRequest.SteamId,
+                ["code"] = steamGuardRequest.Code,
+                ["code_type"] = ((byte)steamGuardRequest.CodeType).ToString()
+            });
 
+            var msg = new HttpRequestMessage(HttpMethod.Post, uri) { Content = content };
             ApplyHeaders(msg);
 
             var result = await _httpClient.SendAsync(msg);
 
-            var resonseString = await result.Content.ReadAsStringAsync();
+            if (!result.IsSuccessStatusCode)
+                _logger.LogWarning("Steam Guard code submission failed. Status: {StatusCode}", result.StatusCode);
 
             return result.ToHttpResult();
         }
 
         public async Task<HttpDataResult<string>> PollAuthSessionStatusAsync(string clientId, string requestId)
         {
-            var queryParams = $"?client_id={clientId}&request_id={Uri.EscapeDataString(requestId)}";
+            _logger.LogDebug("Polling auth session status.");
+            var uri = new Uri(Endpoints.SteamPoweredUrlBase + Endpoints.PollAuthSessionStatus);
 
-            var uri = new Uri(Endpoints.SteamPoweredUrlBase + Endpoints.PollAuthSessionStatus + queryParams);
+            var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["request_id"] = requestId
+            });
 
-            var msg = new HttpRequestMessage(HttpMethod.Post, uri);
+            var msg = new HttpRequestMessage(HttpMethod.Post, uri) { Content = content };
+            ApplyHeaders(msg);
 
-            ApplyHeaders(msg, false);
+            var response = await _httpClient.SendAsync(msg);
 
-            var result = await _httpClient.SendAsync(msg);
-
-            var resonseString = await result.Content.ReadAsStringAsync();
-
-            var responseData = JsonConvert.DeserializeObject<SteamResponseWrapper<PollStatusResponse>>(resonseString);
-
-            return result.ToHttpDataResult(responseData.Data.RefreshToken);
+            return await SendAndDeserializeAsync<SteamResponseWrapper<PollStatusResponse>, string>(
+                response, wrapper => wrapper.Data?.RefreshToken, "Poll auth session status");
         }
 
         public async Task<HttpDataResult<FinalizeLoginResult>> FinalizeLoginAsync(string token)
         {
+            _logger.LogDebug("Finalizing login.");
             var uri = new Uri(Endpoints.SteamLoginUrlBase + Endpoints.FinalizeLogin);
 
             var cookies = GetCookies();
-            var sessionId = cookies.First(x => x.Name.Equals("sessionid")).Value;
+            var sessionId = cookies.FirstOrDefault(x => x.Name.Equals("sessionid"))?.Value;
 
-            var boundary = "----WebKitFormBoundarysMZXRB5xhtSNbrDh";
-            var multipartContent = new MultipartFormDataContent(boundary)
+            var multipartContent = new MultipartFormDataContent
             {
                 { new StringContent(token), "nonce" },
-                { new StringContent(sessionId), "sessionid" },
+                { new StringContent(sessionId ?? string.Empty), "sessionid" },
                 { new StringContent("https://steamcommunity.com/login/home/?goto="), "redir" }
             };
 
@@ -123,26 +134,20 @@ namespace SkibidiSteamLogin.Core.Wrappers
                 Content = multipartContent
             };
 
-            ApplyHeadersFinalize(request);
+            ApplyFinalizeHeaders(request);
 
-            var result = await _httpClient.SendAsync(request);
+            var response = await _httpClient.SendAsync(request);
 
-            var resonseString = await result.Content.ReadAsStringAsync();
-
-            var responseData = JsonConvert.DeserializeObject<FinalizeLoginResult>(resonseString);
-
-            return result.ToHttpDataResult(responseData);
+            return await SendAndDeserializeAsync<FinalizeLoginResult, FinalizeLoginResult>(
+                response, data => data, "Finalize login");
         }
 
-        public async Task<HttpResult> SetToken(string steamId, string auth, string nonce, string url)
+        public async Task<HttpResult> SetTokenAsync(string steamId, string auth, string nonce, string url)
         {
+            _logger.LogDebug("Setting token for {Url}.", url);
             var uri = new Uri(url);
 
-            var cookies = GetCookies();
-            var sessionId = cookies.First(x => x.Name.Equals("sessionid")).Value;
-
-            var boundary = "----WebKitFormBoundarysMZXRB5xhtSNbrDh";
-            var multipartContent = new MultipartFormDataContent(boundary)
+            var multipartContent = new MultipartFormDataContent
             {
                 { new StringContent(nonce), "nonce" },
                 { new StringContent(auth), "auth" },
@@ -156,38 +161,59 @@ namespace SkibidiSteamLogin.Core.Wrappers
 
             var result = await _httpClient.SendAsync(request);
 
+            if (!result.IsSuccessStatusCode)
+                _logger.LogWarning("Set token failed for {Url}. Status: {StatusCode}", url, result.StatusCode);
+
             return result.ToHttpResult();
         }
 
-        private void ApplyHeaders(HttpRequestMessage httpRequestMessage, bool encoded = true)
+        private static void ApplyHeaders(HttpRequestMessage httpRequestMessage)
         {
-            httpRequestMessage.Headers.TryAddWithoutValidation("Accept-Language", "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7");
-            httpRequestMessage.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0");
-            
-            if (encoded)
-            {
-                httpRequestMessage.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
-                httpRequestMessage.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate, br, zstd");
-                httpRequestMessage.Headers.TryAddWithoutValidation("Content-Type", "application/x-www-form-urlencoded");
-            }
+            httpRequestMessage.Headers.TryAddWithoutValidation("Accept", HttpHeaderConstants.AcceptHtml);
+            httpRequestMessage.Headers.TryAddWithoutValidation("Accept-Encoding", HttpHeaderConstants.AcceptEncoding);
         }
 
-        private void ApplyHeadersFinalize(HttpRequestMessage httpRequestMessage)
+        /// <summary>
+        /// Steam's login finalization endpoint requires browser-emulating headers.
+        /// Without them the server returns 403.
+        /// </summary>
+        private static void ApplyFinalizeHeaders(HttpRequestMessage request)
         {
-            httpRequestMessage.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate, br, zstd");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Accept-Language", "pl,en;q=0.9,en-GB;q=0.8,en-US;q=0.7");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Connection", "keep-alive");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Host", "login.steampowered.com");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Origin", "https://steamcommunity.com");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Referer", "https://steamcommunity.com/");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Sec-Ch-Ua", "\"Microsoft Edge\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Mobile", "?0");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Platform", "\"Windows\"");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "empty");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "cors");
-            httpRequestMessage.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "cross-site");
-            httpRequestMessage.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0");
+            var h = request.Headers;
+            h.TryAddWithoutValidation("Accept", HttpHeaderConstants.AcceptJson);
+            h.TryAddWithoutValidation("Accept-Encoding", HttpHeaderConstants.AcceptEncoding);
+            h.TryAddWithoutValidation("Accept-Language", HttpHeaderConstants.AcceptLanguageFinalize);
+            h.TryAddWithoutValidation("Connection", "keep-alive");
+            h.TryAddWithoutValidation("Host", HttpHeaderConstants.FinalizeHost);
+            h.TryAddWithoutValidation("Origin", HttpHeaderConstants.FinalizeOrigin);
+            h.TryAddWithoutValidation("Referer", HttpHeaderConstants.FinalizeReferer);
+            h.TryAddWithoutValidation("Sec-Ch-Ua", HttpHeaderConstants.SecChUa);
+            h.TryAddWithoutValidation("Sec-Ch-Ua-Mobile", HttpHeaderConstants.SecChUaMobile);
+            h.TryAddWithoutValidation("Sec-Ch-Ua-Platform", HttpHeaderConstants.SecChUaPlatform);
+            h.TryAddWithoutValidation("Sec-Fetch-Dest", "empty");
+            h.TryAddWithoutValidation("Sec-Fetch-Mode", "cors");
+            h.TryAddWithoutValidation("Sec-Fetch-Site", "cross-site");
+        }
+
+        private async Task<HttpDataResult<TResult>> SendAndDeserializeAsync<TResponse, TResult>(
+            HttpResponseMessage response,
+            Func<TResponse, TResult> selector,
+            string operationName) where TResult : class
+        {
+            TResult data = null;
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var deserialized = JsonConvert.DeserializeObject<TResponse>(json);
+                data = deserialized is not null ? selector(deserialized) : null;
+            }
+            else
+            {
+                _logger.LogWarning("{Operation} failed. Status: {StatusCode}", operationName, response.StatusCode);
+            }
+
+            return response.ToHttpDataResult(data);
         }
 
         public CookieCollection GetCookies()
@@ -197,7 +223,20 @@ namespace SkibidiSteamLogin.Core.Wrappers
 
         public void SetCookies(CookieCollection cookieCollection)
         {
-            throw new NotImplementedException();
+            foreach (Cookie cookie in cookieCollection)
+            {
+                _cookieContainer.Add(cookie);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _httpClient?.Dispose();
+                _httpClientHandler?.Dispose();
+                _disposed = true;
+            }
         }
     }
 }
